@@ -1,4 +1,4 @@
-# NumPy is often used to load, manipulate and preprocess data.
+# NumPy is often used to load, manipulate and pre-process data.
 import numpy as np
 import tensorflow as tf
 
