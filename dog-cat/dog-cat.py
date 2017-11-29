@@ -42,8 +42,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('data', type=str,
                         help='Path to data directory')
-    parser.add_argument('--net-config', type=str,
-                        help='Path to config file')
     parser.add_argument('--learning-rate', '-lr', type=float,
                         default=DEFAULT_CONFIG_VALUES['learning_rate'],
                         help='Learning rate')
