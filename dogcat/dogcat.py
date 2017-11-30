@@ -1,7 +1,8 @@
 import argparse
 import os
 import tensorflow as tf
-from typing import List
+
+from .preprocess import create_tfrecords
 
 
 DEFAULT_CONFIG_VALUES = {
@@ -15,7 +16,7 @@ def validate_input(user_inputs: argparse.Namespace) -> None:
     """Validate user input"""
 
     # args.data must be a valid directory
-    data_path = user_inputs.data
+    data_path = user_inputs.data_dir
     assert os.path.exists(data_path), 'Cannot find data directory: %s' % data_path
     assert os.path.isdir(data_path), '%s is not a directory' % data_path
 
@@ -49,7 +50,7 @@ def build_model(n_classes: int):
 if __name__ == '__main__':
     """Parse command line arguments, validate them then invoke main logic"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('data', type=str,
+    parser.add_argument('data_dir', type=str,
                         help='Path to extracted training data')
     parser.add_argument('--learning-rate', '-lr', type=float,
                         default=DEFAULT_CONFIG_VALUES['learning_rate'],
@@ -60,5 +61,6 @@ if __name__ == '__main__':
                         help='Activate training mode')
     args = parser.parse_args()
     validate_input(args)
+    create_tfrecords(args.data_dir)
 
 
