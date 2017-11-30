@@ -125,9 +125,8 @@ def convert_to_tfrecords(output_dir: str,
     images_per_shard = int(np.ceil(total / shard_count))
 
     # Prepare output directory
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.makedirs(output_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     for shard_id in range(shard_count):
         output_name = '%s-%05d-of-%05d.tfrecord' % (split_name, shard_id + 1, shard_count)
