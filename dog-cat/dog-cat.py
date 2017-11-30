@@ -19,31 +19,6 @@ def validate_input(user_inputs: argparse.Namespace) -> None:
     assert os.path.exists(data_path), 'Cannot find data directory: %s' % data_path
     assert os.path.isdir(data_path), '%s is not a directory' % data_path
 
-    # Check directory structure
-    # root/
-    # root/train_dir
-    # root/train_dir/cat
-    # root/train_dir/dog
-    # root/val_dir
-    # root/val_dir/cat
-    # root/val_dir/dog
-    def get_sub_dirs(path: str) -> List[str]:
-        return [sub_dir for sub_dir in os.listdir(path) if os.path.isdir(os.path.join(path, sub_dir))]
-
-    sub_dirs = get_sub_dirs(data_path)
-    assert 'train_dir' in sub_dirs, 'Cannot find "train_dir" sub-directory under %s' % data_path
-    assert 'val_dir' in sub_dirs, 'Cannot find "val_dir" sub-directory under %s' % data_path
-
-    train_path = os.path.join(data_path, 'train_dir')
-    train_sub_dirs = get_sub_dirs(train_path)
-    assert 'dog' in train_sub_dirs, 'Cannot find "dog" sub-directory under %s' % train_path
-    assert 'cat' in train_sub_dirs, 'Cannot find "cat" sub-directory under %s' % train_path
-
-    val_path = os.path.join(data_path, 'val_dir')
-    val_sub_dirs = get_sub_dirs(val_path)
-    assert 'dog' in val_sub_dirs, 'Cannot find "dog" sub-directory under %s' % val_path
-    assert 'cat' in val_sub_dirs, 'Cannot find "cat" sub-directory under %s' % val_path
-
 
 def get_data_loader(data_path: str):
     pass
@@ -75,7 +50,7 @@ if __name__ == '__main__':
     """Parse command line arguments, validate them then invoke main logic"""
     parser = argparse.ArgumentParser()
     parser.add_argument('data', type=str,
-                        help='Path to data directory')
+                        help='Path to extracted training data')
     parser.add_argument('--learning-rate', '-lr', type=float,
                         default=DEFAULT_CONFIG_VALUES['learning_rate'],
                         help='Learning rate')
