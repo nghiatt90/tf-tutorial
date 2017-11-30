@@ -2,7 +2,7 @@ import argparse
 import os
 import tensorflow as tf
 
-from .preprocess import create_tfrecords
+from preprocess import create_tfrecords
 
 
 DEFAULT_CONFIG_VALUES = {

@@ -119,7 +119,7 @@ def convert_to_tfrecords(output_dir: str,
     assert len(paths) == len(labels)
     if shard_count is None or shard_count <= 0:
         shard_count = SHARD_COUNT[split_name]
-    assert shard_count >= len(paths), 'Too many shards'
+    assert shard_count < len(paths), 'Too many shards'
 
     total = len(paths)
     images_per_shard = int(np.ceil(total / shard_count))
@@ -129,18 +129,18 @@ def convert_to_tfrecords(output_dir: str,
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
 
-    for shard_id in range(1, shard_count + 1):
-        output_name = '%s-%05d-of-%05d.tfrecord' % (split_name, shard_id, shard_count)
+    for shard_id in range(shard_count):
+        output_name = '%s-%05d-of-%05d.tfrecord' % (split_name, shard_id + 1, shard_count)
         output_path = os.path.join(output_dir, output_name)
         with tf.python_io.TFRecordWriter(output_path) as writer:
             start_idx = shard_id * images_per_shard
             end_idx = min(start_idx + images_per_shard, total)
             for i in range(start_idx, end_idx):
-                sys.stdout.write('\r>> Converting image %d/%d shard %d' % (i + 1, total, shard_id))
+                sys.stdout.write('\r>> Converting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
                 sys.stdout.flush()
 
             example_proto = _create_example_proto(paths[i], labels[i])
             writer.write(example_proto.SerializeToString())
 
-    sys.stdout.write('\n')
-    sys.stdout.flush()
+        sys.stdout.write('\n')
+        sys.stdout.flush()
