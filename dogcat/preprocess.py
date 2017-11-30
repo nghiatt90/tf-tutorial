@@ -2,7 +2,6 @@ import cv2
 import glob
 import os
 import numpy as np
-import shutil
 import sys
 import tensorflow as tf
 from typing import ByteString, List, Tuple
@@ -26,7 +25,7 @@ def create_tfrecords(data_path: str) -> None:
     :param data_path: Path to a extracted training data
     :return: None
     """
-    if False:
+    if os.path.exists(os.path.join(data_path, TFRECORD_DIR_NAME)):
         print('Found TFRecord directory. Skip converting step.')
         print('To re-run this step, delete directory %s under %s' % (TFRECORD_DIR_NAME, data_path))
         return None
