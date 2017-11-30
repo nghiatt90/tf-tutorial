@@ -1,6 +1,9 @@
 import argparse
+import glob
 import os
 import tensorflow as tf
+from tensorflow.contrib.data import TFRecordDataset
+from typing import Any, Dict, List, Tuple
 
 from preprocess import create_tfrecords
 
@@ -21,8 +24,48 @@ def validate_input(user_inputs: argparse.Namespace) -> None:
     assert os.path.isdir(data_path), '%s is not a directory' % data_path
 
 
-def get_data_loader(data_path: str):
-    pass
+def get_tfrecord_files(data_dir: str, split_name: str) -> List[str]:
+    """Get a list of tfrecord files corresponding to split_name.
+
+    :param data_dir: Path to data containing directory
+    :param split_name: One of 'train', 'val', 'test'
+    :return: List of tfrecord file names (string)
+    """
+    pattern = os.path.join(data_dir, '%s-*.tfrecord' % split_name)
+    return glob.glob(pattern)
+
+
+def _parse_example_proto(proto: tf.train.Example, feature_map: Dict):
+    """
+
+    :param proto:
+    :param feature_map:
+    :return:
+    """
+    assert 'image' in feature_map
+    assert 'label' in feature_map
+    features = tf.parse_single_example(proto, features=feature_map)
+    image = tf.decode_raw(features['image'], tf.float32)
+    image = tf.reshape(image, [299, 299, 3])
+    label = tf.cast(features['label'], tf.float32)
+    return image, label
+
+
+def get_tfrecord_loader(file_names: tf.placeholder, batch_size: int = 1) -> tf.contrib.data.Iterator:
+    """Create a dataset and return its iterator.
+
+    The iterator expects a list of tfrecord file names to be fed to
+    its 'file_names' placeholder.
+
+    :param file_names: tf.placeholder
+    :param batch_size: Integer
+    :return: Tensor of type Iterator
+    """
+    dataset = TFRecordDataset(file_names)
+    dataset = dataset.shuffle()
+    dataset = dataset.map(_parse_example_proto)
+    dataset = dataset.batch(batch_size)
+    return dataset.make_initializable_iterator(), file_names
 
 
 def build_model(n_classes: int):
@@ -47,6 +90,41 @@ def build_model(n_classes: int):
     return tf.keras.estimator.model_to_estimator(keras_model=model)
 
 
+# noinspection PyShadowingNames
+def train(args: argparse.Namespace) -> None:
+    """
+    Train a new model.
+
+    :param args: Validated user inputs
+    :return: None
+    """
+    input_dir = create_tfrecords(args.data_dir)
+    file_names = tf.placeholder(tf.string, shape=[None])
+    iterator = get_tfrecord_loader(file_names, args.batch_size)
+    next_batch = iterator.get_next()
+
+    train_file_names = get_tfrecord_files(input_dir, 'train')
+    with tf.Session() as session:
+        for epoch_id in range(args.num_epochs):
+            session.run(iterator.initializer, feed_dict={file_names: train_file_names})
+            while True:
+                try:
+                    session.run(next_batch)
+                except tf.errors.OutOfRangeError:
+                    break
+
+
+# noinspection PyShadowingNames
+def test(args: argparse.Namespace) -> None:
+    """
+    Test a trained model.
+
+    :param args: Validated user inputs
+    :return: None
+    """
+    pass
+
+
 if __name__ == '__main__':
     """Parse command line arguments, validate them then invoke main logic"""
     parser = argparse.ArgumentParser()
@@ -57,10 +135,13 @@ if __name__ == '__main__':
                         help='Learning rate')
     parser.add_argument('--momentum', '-m', type=float,
                         help='Momentum')
+    parser.add_argument('--num-epochs', '-e', type=int, default=1,
+                        help='Number of training epochs. Ignored if --train is not specified')
+    parser.add_argument('--batch-size', '-b', type=int, default=128,
+                        help='Number of images to load in every batch')
     parser.add_argument('--train', action='store_true',
                         help='Activate training mode')
     args = parser.parse_args()
     validate_input(args)
-    create_tfrecords(args.data_dir)
-
-
+    if args.train:
+        train(args=args)

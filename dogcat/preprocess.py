@@ -11,30 +11,33 @@ from typing import ByteString, List, Tuple
 # Ref: https://github.com/kwotsin/create_tfrecords/blob/master/dataset_utils.py
 
 SHARD_COUNT = {
-    'train': 6,
-    'val': 2,
-    'test': 2
+    'train': 13,
+    'val': 5,
+    'test': 5
 }
 TFRECORD_DIR_NAME = 'tfrecords'
 
 
-def create_tfrecords(data_path: str) -> None:
+def create_tfrecords(data_path: str) -> str:
     """
     Create TensorFlow-friendly TFRecord files from raw image data.
 
     :param data_path: Path to a extracted training data
     :return: None
     """
-    if os.path.exists(os.path.join(data_path, TFRECORD_DIR_NAME)):
+    output_dir = os.path.join(data_path, TFRECORD_DIR_NAME)
+    if os.path.exists(output_dir):
         print('Found TFRecord directory. Skip converting step.')
         print('To re-run this step, delete directory %s under %s' % (TFRECORD_DIR_NAME, data_path))
-        return None
-    print('Converting raw images to TFRecords')
-    datasets = shuffle_and_divide(data_path)
-    assert len(datasets) == 3, 'Datasets must contain 3 tuples for train, validation and test sets'
-    split_names = ('train', 'val', 'test')
-    for (paths, labels), split_name in zip(datasets, split_names):
-        convert_to_tfrecords(os.path.join(data_path, TFRECORD_DIR_NAME), split_name, paths, labels)
+    else:
+        print('Converting raw images to TFRecords')
+        datasets = shuffle_and_divide(data_path)
+        assert len(datasets) == 3, 'Datasets must contain 3 tuples for train, validation and test sets'
+        split_names = ('train', 'val', 'test')
+        for (paths, labels), split_name in zip(datasets, split_names):
+            convert_to_tfrecords(output_dir, split_name, paths, labels)
+
+    return output_dir
 
 
 def shuffle_and_divide(data_path: str) -> Tuple[Tuple[List[str], List[int]],
@@ -78,7 +81,7 @@ def load_image(path: str) -> np.ndarray:
     :return: Image after resizing
     """
     image = cv2.imread(path)
-    image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
+    image = cv2.resize(image, (299, 299), interpolation=cv2.INTER_CUBIC)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
     image = image.astype(np.float32)
     return image
@@ -95,8 +98,8 @@ def _bytes_feature(value: ByteString) -> tf.train.Feature:
 def _create_example_proto(path: str, label: int) -> tf.train.Example:
     image = load_image(path)
     features = {
-        'train/label': _int64_feature(label),
-        'train/image': _bytes_feature(tf.compat.as_bytes(image.tostring()))
+        'label': _int64_feature(label),
+        'image': _bytes_feature(tf.compat.as_bytes(image.tostring()))
     }
     return tf.train.Example(features=tf.train.Features(feature=features))
 
