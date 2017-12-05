@@ -139,9 +139,8 @@ def convert_to_tfrecords(output_dir: str,
             for i in range(start_idx, end_idx):
                 sys.stdout.write('\rConverting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
                 sys.stdout.flush()
-
-            example_proto = _create_example_proto(paths[i], labels[i])
-            writer.write(example_proto.SerializeToString())
+                example_proto = _create_example_proto(paths[i], labels[i])
+                writer.write(example_proto.SerializeToString())
 
         sys.stdout.write('\n')
         sys.stdout.flush()
