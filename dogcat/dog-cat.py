@@ -10,10 +10,13 @@ from preprocess import create_tfrecords
 
 DEFAULT_CONFIG_VALUES = {
     'learning_rate': 1e-3,
-    'batch_size': 128,
+    'momentum': 0.9,
+    'batch_size': 8,
 }
 # Default number of classes in pre-trained models (ImageNet)
 MODEL_DEFAULT_CLASS_COUNT = 1024
+# Number of output classes
+OUTPUT_CLASS_COUNT = 2
 
 
 def validate_input(user_inputs: argparse.Namespace) -> None:
@@ -36,27 +39,8 @@ def get_tfrecord_files(data_dir: str, split_name: str) -> List[str]:
     return glob.glob(pattern)
 
 
-def _parse_example_proto(proto: tf.train.Example,
-                         image_size: int = 299, channels: int = 3)\
-        -> Tuple[tf.Tensor, tf.Tensor]:
-    """
-
-    :param proto:
-    :return:
-    """
-    feature_map = {
-        'image': tf.FixedLenFeature([], tf.string),
-        'label': tf.FixedLenFeature([], tf.int64)
-    }
-    features = tf.parse_example(proto, features=feature_map)
-    images = tf.decode_raw(features['image'], tf.float32)
-    images = tf.reshape(images, [-1, image_size, image_size, channels])
-    labels = tf.cast(features['label'], tf.float32)
-    return images, labels
-
-
-def get_tfrecord_loader(file_names: tf.placeholder, batch_size: int = None, buffer_size: int = 1000)\
-        -> tf.contrib.data.Iterator:
+def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_size: int = 1000)\
+        -> Tuple[Dict[str, tf.Tensor], tf.Tensor]:
     """Create a dataset to read tfrecord files and return its iterator.
 
     The iterator expects a list of tfrecord file names to be fed to
@@ -67,14 +51,36 @@ def get_tfrecord_loader(file_names: tf.placeholder, batch_size: int = None, buff
     :param buffer_size: See tf.contrib.Dataset.shuffle
     :return: Tensor of type Iterator
     """
+
+    def parse_example_proto(proto: tf.train.Example, image_size: int = 299, channels: int = 3) \
+            -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+
+        :param proto:
+        :param image_size:
+        :param channels:
+        :return:
+        """
+        feature_map = {
+            'image': tf.FixedLenFeature([], tf.string),
+            'label': tf.FixedLenFeature([], tf.int64)
+        }
+        features = tf.parse_single_example(proto, features=feature_map)
+        image = tf.decode_raw(features['image'], tf.float32)
+        image = tf.reshape(image, [image_size, image_size, channels])
+        label = tf.one_hot(features['label'], OUTPUT_CLASS_COUNT)
+        return image, label
+
     dataset = TFRecordDataset(file_names)
+    dataset = dataset.map(parse_example_proto)
     dataset = dataset.shuffle(buffer_size=buffer_size)
     dataset = dataset.batch(batch_size)
-    dataset = dataset.map(_parse_example_proto)
-    return dataset.make_initializable_iterator()
+    iterator = dataset.make_one_shot_iterator()
+    images, labels = iterator.get_next()
+    return {'input_1': images}, labels
 
 
-def build_model(n_classes: int):
+def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9) -> tf.estimator.Estimator:
     # Use Keras's Inception v3 model without weights to retrain from scratch.
     # include_top = False removes the last fully connected layer.
     model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights=None)
@@ -82,16 +88,16 @@ def build_model(n_classes: int):
     # Replace last layer with our own.
     # GlobalAveragePooling2D converts the MxNxC tensor output into a 1xC tensor where C is the # of channels.
     # Dense is a fully connected layer.
-    last_layer = model.output
-    last_layer = tf.keras.layers.GlobalAveragePooling2D()(last_layer)
-    last_layer = tf.keras.layers.Dense(MODEL_DEFAULT_CLASS_COUNT, activation='relu')(last_layer)
-    predictions = tf.keras.layers.Dense(n_classes, activation='softmax')(last_layer)  # new softmax layer
+    x = model.output
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(MODEL_DEFAULT_CLASS_COUNT, activation='relu')(x)
+    predictions = tf.keras.layers.Dense(n_classes, activation='softmax')(x)  # new softmax layer
     model = tf.keras.models.Model(inputs=model.input, outputs=predictions)
 
     model.compile(
-        optimizer=tf.keras.optimizers.SGD(lr=args.learning_rate, momentum=args.momentum),
+        optimizer=tf.keras.optimizers.SGD(lr=lr, momentum=momentum),
         loss='categorical_crossentropy',
-        metric='accuracy'
+        metric=['accuracy']
     )
     return tf.keras.estimator.model_to_estimator(keras_model=model)
 
@@ -105,21 +111,14 @@ def train(args: argparse.Namespace) -> None:
     :return: None
     """
     input_dir = create_tfrecords(args.data_dir)
-    file_names = tf.placeholder(tf.string, shape=[None])
-    iterator = get_tfrecord_loader(file_names, args.batch_size)
-    next_batch = iterator.get_next()
+    model = build_model(OUTPUT_CLASS_COUNT, args.learning_rate, args.momentum)
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
-    with tf.Session() as session:
-        for epoch_id in range(args.num_epochs):
-            session.run(iterator.initializer, feed_dict={file_names: train_file_names})
-            while True:
-                try:
-                    images, labels = session.run(next_batch)
-
-                except tf.errors.OutOfRangeError:
-                    # End of 1 epoch
-                    break
+    val_file_names = get_tfrecord_files(input_dir, 'val')
+    for epoch in range(args.num_epochs):
+        model.train(lambda: get_tfrecord_loader(train_file_names, args.batch_size))
+        eval_results = model.evaluate(lambda: get_tfrecord_loader(val_file_names, args.batch_size))
+        print(eval_results)
 
 
 # noinspection PyShadowingNames
@@ -142,6 +141,7 @@ if __name__ == '__main__':
                         default=DEFAULT_CONFIG_VALUES['learning_rate'],
                         help='Learning rate')
     parser.add_argument('--momentum', '-m', type=float,
+                        default=DEFAULT_CONFIG_VALUES['momentum'],
                         help='Momentum')
     parser.add_argument('--num-epochs', '-e', type=int, default=1,
                         help='Number of training epochs. Ignored if --train is not specified')
