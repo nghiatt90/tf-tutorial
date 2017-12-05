@@ -49,10 +49,10 @@ def _parse_example_proto(proto: tf.train.Example,
         'label': tf.FixedLenFeature([], tf.int64)
     }
     features = tf.parse_example(proto, features=feature_map)
-    image = tf.decode_raw(features['image'], tf.float32)
-    image = tf.reshape(image, [-1, image_size, image_size, channels])
-    label = tf.cast(features['label'], tf.float32)
-    return image, label
+    images = tf.decode_raw(features['image'], tf.float32)
+    images = tf.reshape(images, [-1, image_size, image_size, channels])
+    labels = tf.cast(features['label'], tf.float32)
+    return images, labels
 
 
 def get_tfrecord_loader(file_names: tf.placeholder, batch_size: int = None, buffer_size: int = 1000)\
@@ -115,10 +115,10 @@ def train(args: argparse.Namespace) -> None:
             session.run(iterator.initializer, feed_dict={file_names: train_file_names})
             while True:
                 try:
-                    a = session.run(next_batch)
-                    print(type(a), len(a), type(a[0]), a[0].shape)
-                    print(a[1])
+                    images, labels = session.run(next_batch)
+
                 except tf.errors.OutOfRangeError:
+                    # End of 1 epoch
                     break
 
 
