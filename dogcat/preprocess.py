@@ -11,7 +11,7 @@ from typing import ByteString, List, Tuple
 # Ref: https://github.com/kwotsin/create_tfrecords/blob/master/dataset_utils.py
 
 SHARD_COUNT = {
-    'train': 13,
+    'train': 15,
     'val': 5,
     'test': 5
 }
@@ -137,7 +137,7 @@ def convert_to_tfrecords(output_dir: str,
             start_idx = shard_id * images_per_shard
             end_idx = min(start_idx + images_per_shard, total)
             for i in range(start_idx, end_idx):
-                sys.stdout.write('\r>> Converting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
+                sys.stdout.write('\rConverting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
                 sys.stdout.flush()
 
             example_proto = _create_example_proto(paths[i], labels[i])

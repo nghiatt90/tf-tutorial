@@ -35,37 +35,37 @@ def get_tfrecord_files(data_dir: str, split_name: str) -> List[str]:
     return glob.glob(pattern)
 
 
-def _parse_example_proto(proto: tf.train.Example, feature_map: Dict):
+def _parse_example_proto(proto: tf.train.Example):
     """
 
     :param proto:
-    :param feature_map:
     :return:
     """
-    assert 'image' in feature_map
-    assert 'label' in feature_map
-    features = tf.parse_single_example(proto, features=feature_map)
+    feature_map = {
+        'image': tf.FixedLenFeature([], tf.string),
+        'label': tf.FixedLenFeature([], tf.int64)
+    }
+    features = tf.parse_example(proto, features=feature_map)
     image = tf.decode_raw(features['image'], tf.float32)
-    image = tf.reshape(image, [299, 299, 3])
+    image = tf.reshape(image, [15, 299, 299, 3])
     label = tf.cast(features['label'], tf.float32)
     return image, label
 
 
-def get_tfrecord_loader(file_names: tf.placeholder, batch_size: int = 1) -> tf.contrib.data.Iterator:
-    """Create a dataset and return its iterator.
+def get_tfrecord_loader(file_names: tf.placeholder) -> tf.contrib.data.Iterator:
+    """Create a dataset to read tfrecord files and return its iterator.
 
     The iterator expects a list of tfrecord file names to be fed to
     its 'file_names' placeholder.
 
     :param file_names: tf.placeholder
-    :param batch_size: Integer
     :return: Tensor of type Iterator
     """
     dataset = TFRecordDataset(file_names)
-    dataset = dataset.shuffle()
+    dataset = dataset.shuffle(buffer_size=1000)
+    dataset = dataset.batch(128)
     dataset = dataset.map(_parse_example_proto)
-    dataset = dataset.batch(batch_size)
-    return dataset.make_initializable_iterator(), file_names
+    return dataset.make_initializable_iterator()
 
 
 def build_model(n_classes: int):
@@ -100,7 +100,7 @@ def train(args: argparse.Namespace) -> None:
     """
     input_dir = create_tfrecords(args.data_dir)
     file_names = tf.placeholder(tf.string, shape=[None])
-    iterator = get_tfrecord_loader(file_names, args.batch_size)
+    iterator = get_tfrecord_loader(file_names)
     next_batch = iterator.get_next()
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
@@ -109,7 +109,9 @@ def train(args: argparse.Namespace) -> None:
             session.run(iterator.initializer, feed_dict={file_names: train_file_names})
             while True:
                 try:
-                    session.run(next_batch)
+                    a = session.run(next_batch)
+                    print(type(a), len(a), type(a[0]), a[0].shape)
+                    print(a[1])
                 except tf.errors.OutOfRangeError:
                     break
 
