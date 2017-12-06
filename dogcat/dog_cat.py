@@ -9,10 +9,12 @@ from typing import Dict, List, Tuple
 from preprocess import create_tfrecords
 
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+
 DEFAULT_CONFIG_VALUES = {
     'learning_rate': 1e-3,
     'momentum': 0.9,
-    'batch_size': 8,
+    'batch_size': 32,
 }
 # Default number of classes in pre-trained models (ImageNet)
 MODEL_DEFAULT_CLASS_COUNT = 1024
@@ -40,8 +42,9 @@ def get_tfrecord_files(data_dir: str, split_name: str) -> List[str]:
     return glob.glob(pattern)
 
 
-def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_size: int = 1000)\
-        -> Tuple[Dict[str, tf.Tensor], tf.Tensor]:
+def get_tfrecord_loader(file_names: List[str],
+                        batch_size: int = None, buffer_size: int = 256, epochs: int = None,
+                        shuffle: bool = True) -> Tuple[Dict[str, tf.Tensor], tf.Tensor]:
     """Create a dataset to read tfrecord files and return its iterator.
 
     The iterator expects a list of tfrecord file names to be fed to
@@ -50,6 +53,8 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
     :param file_names: tf.placeholder
     :param batch_size: Number of images in each batch
     :param buffer_size: See tf.contrib.Dataset.shuffle
+    :param epochs:
+    :param shuffle: Whether or not to shuffle the dataset
     :return: Tensor of type Iterator
     """
 
@@ -59,7 +64,7 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
     }
 
     def parse_example_proto(proto: tf.train.Example, image_size: int = 299, channels: int = 3) \
-            -> Tuple[tf.Tensor, tf.Tensor]:
+            -> Tuple[Dict[str, tf.Tensor], List[tf.Tensor]]:
         """
 
         :param proto:
@@ -71,15 +76,18 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
         image = tf.decode_raw(features['image'], tf.float32)
         image = tf.reshape(image, [image_size, image_size, channels])
         label = tf.one_hot(features['label'], OUTPUT_CLASS_COUNT)
-        return image, label
+
+        return dict(zip(['input_1'], [image])), [label]
 
     dataset = TFRecordDataset(file_names)
     dataset = dataset.map(parse_example_proto)
-    dataset = dataset.shuffle(buffer_size=buffer_size)
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size=buffer_size)
     dataset = dataset.batch(batch_size)
+    dataset.repeat(epochs)
     iterator = dataset.make_one_shot_iterator()
     images, labels = iterator.get_next()
-    return {'input_1': images}, labels
+    return images, labels
 
 
 def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9,
@@ -102,6 +110,8 @@ def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9,
         loss='categorical_crossentropy',
         metric=['accuracy']
     )
+    model_dir = os.path.join(os.getcwd(), model_dir)
+    os.makedirs(model_dir, exist_ok=True)
     return tf.keras.estimator.model_to_estimator(keras_model=model, model_dir=model_dir)
 
 
@@ -118,12 +128,18 @@ def train(args: argparse.Namespace) -> None:
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
     val_file_names = get_tfrecord_files(input_dir, 'val')
-    for epoch in range(args.num_epochs):
-        start_time = time.time()
-        model.train(lambda: get_tfrecord_loader(train_file_names, args.batch_size), steps=100)
-        eval_results = model.evaluate(lambda: get_tfrecord_loader(val_file_names, args.batch_size), steps=60)
-        print(eval_results)
-        print('Elapsed time:', time.time() - start_time)
+    start_time = time.time()
+
+    train_spec = tf.estimator.TrainSpec(lambda: get_tfrecord_loader(train_file_names,
+                                                                    args.batch_size,
+                                                                    epochs=args.num_epochs),
+                                        max_steps=1000)
+    eval_spec = tf.estimator.EvalSpec(lambda: get_tfrecord_loader(val_file_names,
+                                                                  args.batch_size,
+                                                                  shuffle=False))
+    tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+
+    print('Elapsed time:', time.time() - start_time)
 
 
 # noinspection PyShadowingNames
@@ -152,13 +168,15 @@ if __name__ == '__main__':
                         default=DEFAULT_CONFIG_VALUES['momentum'],
                         help='Momentum')
     parser.add_argument('--num-epochs', '-e', type=int, default=1,
-                        help='Number of training epochs. Ignored if --train is not specified')
+                        help='Number of training epochs')
     parser.add_argument('--batch-size', '-b', type=int,
                         default=DEFAULT_CONFIG_VALUES['batch_size'],
                         help='Number of images to load in every batch')
-    parser.add_argument('--train', action='store_true',
+    parser.add_argument('--test', action='store_true',
                         help='Activate training mode')
     args = parser.parse_args()
     validate_input(args)
-    if args.train:
-        train(args=args)
+    if not args.test:
+        train(args)
+    else:
+        test(args)
