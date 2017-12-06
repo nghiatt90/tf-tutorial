@@ -3,7 +3,7 @@ import glob
 import os
 import tensorflow as tf
 from tensorflow.contrib.data import TFRecordDataset
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 from preprocess import create_tfrecords
 

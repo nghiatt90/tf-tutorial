@@ -1,4 +1,3 @@
-import cv2
 import glob
 import os
 import numpy as np
@@ -74,20 +73,6 @@ def shuffle_and_divide(data_path: str) -> Tuple[Tuple[List[str], List[int]],
     return (train_paths, train_labels), (val_paths, val_labels), (test_paths, test_labels)
 
 
-def load_image(path: str) -> np.ndarray:
-    """
-    Read an image, resize to 224x224.
-
-    :param path: Path to image
-    :return: Image after resizing
-    """
-    image = cv2.imread(path)
-    image = cv2.resize(image, (299, 299), interpolation=cv2.INTER_CUBIC)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
-    image = image.astype(np.float32)
-    return image
-
-
 def convert_to_tfrecords(output_dir: str,
                          split_name: str, paths: List[str], labels: List[int],
                          shard_count: int = None) -> None:
@@ -115,7 +100,7 @@ def convert_to_tfrecords(output_dir: str,
         os.makedirs(output_dir)
 
     def create_example_proto(path: str, label: int) -> tf.train.Example:
-        image = load_image(path)
+        image = eutil.load_image(path)
         features = {
             'label': eutil.int64_feature(label),
             'image': eutil.bytes_feature(tf.compat.as_bytes(image.tostring()))
