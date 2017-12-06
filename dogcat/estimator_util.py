@@ -25,3 +25,21 @@ def load_image(path: str, image_size: int = 299) -> np.ndarray:
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
     image = image.astype(np.float32)
     return image
+
+
+def create_example_proto(path: str, label: int = None) -> tf.train.Example:
+    """
+    Create an instance of tf.train.Example from an image for training or testing.
+
+    :param path: Path to the image
+    :param label: Class label of the image
+    :return: tf.train.Example
+    """
+    image = load_image(path)
+    features = {
+        'label': int64_feature(label),
+        'image': bytes_feature(tf.compat.as_bytes(image.tostring()))
+    } if label is not None else {
+        'image': bytes_feature(tf.compat.as_bytes(image.tostring()))
+    }
+    return tf.train.Example(features=tf.train.Features(feature=features))

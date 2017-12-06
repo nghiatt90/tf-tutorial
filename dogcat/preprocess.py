@@ -99,14 +99,6 @@ def convert_to_tfrecords(output_dir: str,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    def create_example_proto(path: str, label: int) -> tf.train.Example:
-        image = eutil.load_image(path)
-        features = {
-            'label': eutil.int64_feature(label),
-            'image': eutil.bytes_feature(tf.compat.as_bytes(image.tostring()))
-        }
-        return tf.train.Example(features=tf.train.Features(feature=features))
-
     for shard_id in range(shard_count):
         output_name = '%s-%05d-of-%05d.tfrecord' % (split_name, shard_id + 1, shard_count)
         output_path = os.path.join(output_dir, output_name)
