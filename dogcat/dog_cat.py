@@ -120,6 +120,11 @@ def train(args: argparse.Namespace) -> None:
         eval_results = model.evaluate(lambda: get_tfrecord_loader(val_file_names, args.batch_size))
         print(eval_results)
 
+    # Save model
+    feature_map = {'image': tf.FixedLenFeature([], tf.string)}
+    serving_input_receiver_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(feature_map)
+    model.export_savedmodel(args.output_dir, serving_input_receiver_fn)
+
 
 # noinspection PyShadowingNames
 def test(args: argparse.Namespace) -> None:
@@ -137,6 +142,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('data_dir', type=str,
                         help='Path to extracted training data')
+    parser.add_argument('--output_dir', type=str,
+                        default='.',
+                        help='Path to save trained model. Default: current directory')
     parser.add_argument('--learning-rate', '-lr', type=float,
                         default=DEFAULT_CONFIG_VALUES['learning_rate'],
                         help='Learning rate')
