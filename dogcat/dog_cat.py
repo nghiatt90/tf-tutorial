@@ -3,6 +3,7 @@ import glob
 import os
 import tensorflow as tf
 from tensorflow.contrib.data import TFRecordDataset
+import time
 from typing import Dict, List, Tuple
 
 from preprocess import create_tfrecords
@@ -52,6 +53,11 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
     :return: Tensor of type Iterator
     """
 
+    feature_map = {
+        'image': tf.FixedLenFeature([], tf.string),
+        'label': tf.FixedLenFeature([], tf.int64)
+    }
+
     def parse_example_proto(proto: tf.train.Example, image_size: int = 299, channels: int = 3) \
             -> Tuple[tf.Tensor, tf.Tensor]:
         """
@@ -61,10 +67,6 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
         :param channels:
         :return:
         """
-        feature_map = {
-            'image': tf.FixedLenFeature([], tf.string),
-            'label': tf.FixedLenFeature([], tf.int64)
-        }
         features = tf.parse_single_example(proto, features=feature_map)
         image = tf.decode_raw(features['image'], tf.float32)
         image = tf.reshape(image, [image_size, image_size, channels])
@@ -80,7 +82,8 @@ def get_tfrecord_loader(file_names: List[str], batch_size: int = None, buffer_si
     return {'input_1': images}, labels
 
 
-def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9) -> tf.estimator.Estimator:
+def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9,
+                model_dir: str = None) -> tf.estimator.Estimator:
     # Use Keras's Inception v3 model without weights to retrain from scratch.
     # include_top = False removes the last fully connected layer.
     model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights=None)
@@ -99,7 +102,7 @@ def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9) -> tf.e
         loss='categorical_crossentropy',
         metric=['accuracy']
     )
-    return tf.keras.estimator.model_to_estimator(keras_model=model)
+    return tf.keras.estimator.model_to_estimator(keras_model=model, model_dir=model_dir)
 
 
 # noinspection PyShadowingNames
@@ -111,19 +114,16 @@ def train(args: argparse.Namespace) -> None:
     :return: None
     """
     input_dir = create_tfrecords(args.data_dir)
-    model = build_model(OUTPUT_CLASS_COUNT, args.learning_rate, args.momentum)
+    model = build_model(OUTPUT_CLASS_COUNT, args.learning_rate, args.momentum, args.output_dir)
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
     val_file_names = get_tfrecord_files(input_dir, 'val')
     for epoch in range(args.num_epochs):
-        model.train(lambda: get_tfrecord_loader(train_file_names, args.batch_size))
-        eval_results = model.evaluate(lambda: get_tfrecord_loader(val_file_names, args.batch_size))
+        start_time = time.time()
+        model.train(lambda: get_tfrecord_loader(train_file_names, args.batch_size), steps=100)
+        eval_results = model.evaluate(lambda: get_tfrecord_loader(val_file_names, args.batch_size), steps=60)
         print(eval_results)
-
-    # Save model
-    feature_map = {'image': tf.FixedLenFeature([], tf.string)}
-    serving_input_receiver_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(feature_map)
-    model.export_savedmodel(args.output_dir, serving_input_receiver_fn)
+        print('Elapsed time:', time.time() - start_time)
 
 
 # noinspection PyShadowingNames
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('data_dir', type=str,
                         help='Path to extracted training data')
-    parser.add_argument('--output_dir', type=str,
+    parser.add_argument('--output-dir', '-o', type=str,
                         default='.',
                         help='Path to save trained model. Default: current directory')
     parser.add_argument('--learning-rate', '-lr', type=float,
