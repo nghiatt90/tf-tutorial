@@ -4,7 +4,8 @@ import os
 import numpy as np
 import sys
 import tensorflow as tf
-from typing import ByteString, List, Tuple
+from typing import List, Tuple
+import estimator_util as eutil
 
 
 # Ref: http://machinelearninguru.com/deep_learning/tensorflow/basics/tfrecord/tfrecord.html
@@ -87,23 +88,6 @@ def load_image(path: str) -> np.ndarray:
     return image
 
 
-def _int64_feature(value: int) -> tf.train.Feature:
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
-
-def _bytes_feature(value: ByteString) -> tf.train.Feature:
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-
-def _create_example_proto(path: str, label: int) -> tf.train.Example:
-    image = load_image(path)
-    features = {
-        'label': _int64_feature(label),
-        'image': _bytes_feature(tf.compat.as_bytes(image.tostring()))
-    }
-    return tf.train.Example(features=tf.train.Features(feature=features))
-
-
 def convert_to_tfrecords(output_dir: str,
                          split_name: str, paths: List[str], labels: List[int],
                          shard_count: int = None) -> None:
@@ -130,6 +114,14 @@ def convert_to_tfrecords(output_dir: str,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    def create_example_proto(path: str, label: int) -> tf.train.Example:
+        image = load_image(path)
+        features = {
+            'label': eutil.int64_feature(label),
+            'image': eutil.bytes_feature(tf.compat.as_bytes(image.tostring()))
+        }
+        return tf.train.Example(features=tf.train.Features(feature=features))
+
     for shard_id in range(shard_count):
         output_name = '%s-%05d-of-%05d.tfrecord' % (split_name, shard_id + 1, shard_count)
         output_path = os.path.join(output_dir, output_name)
@@ -139,7 +131,7 @@ def convert_to_tfrecords(output_dir: str,
             for i in range(start_idx, end_idx):
                 sys.stdout.write('\rConverting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
                 sys.stdout.flush()
-                example_proto = _create_example_proto(paths[i], labels[i])
+                example_proto = create_example_proto(paths[i], labels[i])
                 writer.write(example_proto.SerializeToString())
 
         sys.stdout.write('\n')
