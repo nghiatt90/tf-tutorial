@@ -2,14 +2,15 @@ import argparse
 import glob
 import os
 import tensorflow as tf
-from tensorflow.contrib.data import TFRecordDataset
+from tensorflow.python.data import TFRecordDataset
+from tensorflow.python.keras.preprocessing import image as kimg
 import time
 from typing import Dict, List, Tuple
 
 from preprocess import create_tfrecords
 
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+tf.logging.set_verbosity(tf.logging.INFO)
 
 DEFAULT_CONFIG_VALUES = {
     'learning_rate': 1e-3,
@@ -75,8 +76,8 @@ def get_tfrecord_loader(file_names: List[str],
         features = tf.parse_single_example(proto, features=feature_map)
         image = tf.decode_raw(features['image'], tf.float32)
         image = tf.reshape(image, [image_size, image_size, channels])
-        label = tf.one_hot(features['label'], OUTPUT_CLASS_COUNT)
-
+        image = tf.subtract(image, 116.779)
+        label = tf.cast(features['label'], tf.float32)
         return dict(zip(['input_1'], [image])), [label]
 
     dataset = TFRecordDataset(file_names)
@@ -90,26 +91,29 @@ def get_tfrecord_loader(file_names: List[str],
     return images, labels
 
 
-def build_model(n_classes: int, lr: float = 1e-3, momentum: float = 0.9,
-                model_dir: str = None) -> tf.estimator.Estimator:
+def build_model(lr: float = 1e-3, momentum: float = 0.9, model_dir: str = None) -> tf.estimator.Estimator:
     # Use Keras's Inception v3 model without weights to retrain from scratch.
     # include_top = False removes the last fully connected layer.
-    model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights=None)
+    base_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
 
     # Replace last layer with our own.
     # GlobalAveragePooling2D converts the MxNxC tensor output into a 1xC tensor where C is the # of channels.
     # Dense is a fully connected layer.
-    x = model.output
-    x = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x = tf.keras.layers.Dense(MODEL_DEFAULT_CLASS_COUNT, activation='relu')(x)
-    predictions = tf.keras.layers.Dense(n_classes, activation='softmax')(x)  # new softmax layer
-    model = tf.keras.models.Model(inputs=model.input, outputs=predictions)
+    layers = tf.keras.layers
+    model = tf.keras.models.Sequential()
+    model.add(base_model)
+    model.add(layers.GlobalAveragePooling2D())
+    model.add(layers.Dense(MODEL_DEFAULT_CLASS_COUNT, activation='relu'))
+    model.add(layers.Dense(1, activation='sigmoid'))
+    base_model.trainable = False
 
     model.compile(
-        optimizer=tf.keras.optimizers.SGD(lr=lr, momentum=momentum),
-        loss='categorical_crossentropy',
+        optimizer=tf.keras.optimizers.RMSprop(lr=lr),
+        loss='binary_crossentropy',
         metric=['accuracy']
     )
+    # print(model.summary())
+
     model_dir = os.path.join(os.getcwd(), model_dir)
     os.makedirs(model_dir, exist_ok=True)
     return tf.keras.estimator.model_to_estimator(keras_model=model, model_dir=model_dir)
@@ -123,23 +127,52 @@ def train(args: argparse.Namespace) -> None:
     :param args: Validated user inputs
     :return: None
     """
+    start_time = time.time()
     input_dir = create_tfrecords(args.data_dir)
-    model = build_model(OUTPUT_CLASS_COUNT, args.learning_rate, args.momentum, args.output_dir)
+    checkpoint1 = time.time()
+    model = build_model(args.learning_rate, args.momentum, args.output_dir)
+    checkpoint2 = time.time()
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
     val_file_names = get_tfrecord_files(input_dir, 'val')
-    start_time = time.time()
+    checkpoint3 = time.time()
+
+    # next_batch = get_tfrecord_loader(train_file_names, args.batch_size, epochs=args.num_epochs)
+    # with tf.Session() as sess:
+    #     first_batch = sess.run(next_batch)
+    # images = first_batch[0]['input_1']
+    # for d in images[:10]:
+    #     image = kimg.array_to_img(d)
+    #     image.show()
+    #     input()
+    # print(first_batch[1][:10])
 
     train_spec = tf.estimator.TrainSpec(lambda: get_tfrecord_loader(train_file_names,
                                                                     args.batch_size,
                                                                     epochs=args.num_epochs),
-                                        max_steps=1000)
+                                        max_steps=500)
     eval_spec = tf.estimator.EvalSpec(lambda: get_tfrecord_loader(val_file_names,
                                                                   args.batch_size,
                                                                   shuffle=False))
     tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
+    checkpoint4 = time.time()
+    predictions = model.predict(lambda: get_tfrecord_loader(val_file_names,
+                                                            args.batch_size,
+                                                            shuffle=True))
+    t = 10
+    for kvp in predictions:
+        print(kvp)
+        t -= 1
+        if t == 0:
+            break
+    checkpoint5 = time.time()
 
-    print('Elapsed time:', time.time() - start_time)
+    print('Elapsed time:', checkpoint5 - start_time)
+    print('Create TFRecords:', checkpoint1 - start_time)
+    print('Build model:', checkpoint2 - checkpoint1)
+    print('Get file names:', checkpoint3 - checkpoint2)
+    print('Train and evaluate:', checkpoint4 - checkpoint3)
+    print('Predict:', checkpoint5 - checkpoint4)
 
 
 # noinspection PyShadowingNames
