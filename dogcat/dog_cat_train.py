@@ -27,16 +27,10 @@ OUTPUT_CLASS_COUNT = 2
 def validate_input(args: argparse.Namespace) -> None:
     """Validate user input"""
 
-    # --data-dir and --test are mutually exclusive
-    assert not (args.data_dir is not None and args.test is not None), '--data-dir and --test are mutually exclusive'
-
     # args.data must be a valid directory
     data_path = args.data_dir
     assert os.path.exists(data_path), 'Cannot find data directory: %s' % data_path
     assert os.path.isdir(data_path), '%s is not a directory' % data_path
-
-    # args.data must exist
-    assert os.path.exists(args.test), 'Cannot find %s' % data_path
 
 
 def get_tfrecord_files(data_dir: str, split_name: str) -> List[str]:
@@ -189,17 +183,6 @@ def train(args: argparse.Namespace) -> None:
     print('Calculate accuracy: %.2fs' % checkpoint5 - checkpoint4)
 
 
-# noinspection PyShadowingNames
-def test(args: argparse.Namespace) -> None:
-    """
-    Test a trained model.
-
-    :param args: Validated user inputs
-    :return: None
-    """
-    pass
-
-
 if __name__ == '__main__':
     """Parse command line arguments, validate them then invoke main logic"""
     parser = argparse.ArgumentParser()
@@ -223,10 +206,8 @@ if __name__ == '__main__':
                         default=DEFAULT_CONFIG_VALUES['batch_size'],
                         help='Number of images to load in every batch')
     parser.add_argument('--test', type=str,
-                        help='Test model on an image or directory of images')
+                        help='Test model on an image or directory of images.'
+                             'If specified, all other parameters are ignored.')
     args = parser.parse_args()
     validate_input(args)
-    if not args.test:
-        train(args)
-    else:
-        test(args)
+    train(args)
