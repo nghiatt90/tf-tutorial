@@ -1,5 +1,6 @@
 import argparse
 import glob
+import numpy as np
 import os
 import tensorflow as tf
 from tensorflow.python.data import TFRecordDataset
@@ -150,21 +151,28 @@ def train(args: argparse.Namespace) -> None:
     train_spec = tf.estimator.TrainSpec(lambda: get_tfrecord_loader(train_file_names,
                                                                     args.batch_size,
                                                                     epochs=args.num_epochs),
-                                        max_steps=500)
+                                        max_steps=args.max_steps)
     eval_spec = tf.estimator.EvalSpec(lambda: get_tfrecord_loader(val_file_names,
                                                                   args.batch_size,
                                                                   shuffle=False))
     tf.estimator.train_and_evaluate(model, train_spec, eval_spec)
     checkpoint4 = time.time()
-    predictions = model.predict(lambda: get_tfrecord_loader(val_file_names,
-                                                            args.batch_size,
-                                                            shuffle=True))
-    t = 10
-    for kvp in predictions:
-        print(kvp)
-        t -= 1
-        if t == 0:
-            break
+    next_batch = get_tfrecord_loader(val_file_names, args.batch_size, shuffle=False)
+    labels = np.array([])
+    with tf.Session() as sess:
+        while True:
+            try:
+                batch = sess.run(next_batch)
+            except tf.errors.OutOfRangeError:
+                break
+            else:
+                labels = np.append(labels, batch[1])
+
+    predictions = model.predict(lambda: get_tfrecord_loader(val_file_names, args.batch_size, shuffle=False))
+    predictions = np.array(list(map(lambda x: 0 if x['dense_2'][0] < 0.5 else 1, predictions)))
+    assert len(predictions) == len(labels)
+    print('Accuracy: %.2f%%' % (np.sum(predictions == labels) * 100 / len(labels)))
+
     checkpoint5 = time.time()
 
     print('Elapsed time:', checkpoint5 - start_time)
@@ -172,7 +180,7 @@ def train(args: argparse.Namespace) -> None:
     print('Build model:', checkpoint2 - checkpoint1)
     print('Get file names:', checkpoint3 - checkpoint2)
     print('Train and evaluate:', checkpoint4 - checkpoint3)
-    print('Predict:', checkpoint5 - checkpoint4)
+    print('Calculate accuracy:', checkpoint5 - checkpoint4)
 
 
 # noinspection PyShadowingNames
@@ -202,6 +210,9 @@ if __name__ == '__main__':
                         help='Momentum')
     parser.add_argument('--num-epochs', '-e', type=int, default=1,
                         help='Number of training epochs')
+    parser.add_argument('--max-steps', '-x', type=int,
+                        default=1000,
+                        help='Maximum number of training steps. Default to 1000')
     parser.add_argument('--batch-size', '-b', type=int,
                         default=DEFAULT_CONFIG_VALUES['batch_size'],
                         help='Number of images to load in every batch')
