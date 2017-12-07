@@ -175,12 +175,12 @@ def train(args: argparse.Namespace) -> None:
 
     checkpoint5 = time.time()
 
-    print('Elapsed time:', checkpoint5 - start_time)
-    print('Create TFRecords:', checkpoint1 - start_time)
-    print('Build model:', checkpoint2 - checkpoint1)
-    print('Get file names:', checkpoint3 - checkpoint2)
-    print('Train and evaluate:', checkpoint4 - checkpoint3)
-    print('Calculate accuracy:', checkpoint5 - checkpoint4)
+    print('Elapsed time: %.2sf' % checkpoint5 - start_time)
+    print('Create TFRecords: %.2fs' % checkpoint1 - start_time)
+    print('Build model: %.2fs' % checkpoint2 - checkpoint1)
+    print('Get file names: %.2fs' % checkpoint3 - checkpoint2)
+    print('Train and evaluate: %.2fs' % checkpoint4 - checkpoint3)
+    print('Calculate accuracy: %.2fs' % checkpoint5 - checkpoint4)
 
 
 # noinspection PyShadowingNames
