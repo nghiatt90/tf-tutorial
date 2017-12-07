@@ -3,8 +3,9 @@ import glob
 import numpy as np
 import os
 import tensorflow as tf
-from tensorflow.python.data import TFRecordDataset
-from tensorflow.python.keras.preprocessing import image as kimg
+from tensorflow.contrib.data import TFRecordDataset
+from tensorflow.contrib import keras
+# from tensorflow.contrib.keras.preprocess import image as kimg
 import time
 from typing import Dict, List, Tuple
 
@@ -92,16 +93,17 @@ def get_tfrecord_loader(file_names: List[str],
     return images, labels
 
 
-def build_model(weights: str = None, lr: float = 1e-3, momentum: float = 0.9, model_dir: str = None) -> tf.estimator.Estimator:
+def build_model(weights: str = None, lr: float = 1e-3, momentum: float = 0.9,
+                model_dir: str = None) -> tf.estimator.Estimator:
     # Use Keras's Inception v3 model without weights to retrain from scratch.
     # include_top = False removes the last fully connected layer.
-    base_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights=weights)
+    base_model = keras.applications.inception_v3.InceptionV3(include_top=False, weights=weights)
 
     # Replace last layer with our own.
     # GlobalAveragePooling2D converts the MxNxC tensor output into a 1xC tensor where C is the # of channels.
     # Dense is a fully connected layer.
-    layers = tf.keras.layers
-    model = tf.keras.models.Sequential()
+    layers = keras.layers
+    model = keras.models.Sequential()
     model.add(base_model)
     model.add(layers.GlobalAveragePooling2D())
     model.add(layers.Dense(1024, activation='relu'))
@@ -109,7 +111,7 @@ def build_model(weights: str = None, lr: float = 1e-3, momentum: float = 0.9, mo
     base_model.trainable = False
 
     model.compile(
-        optimizer=tf.keras.optimizers.RMSprop(lr=lr),
+        optimizer=keras.optimizers.RMSprop(lr=lr),
         loss='binary_crossentropy',
         metric=['accuracy']
     )
@@ -117,7 +119,7 @@ def build_model(weights: str = None, lr: float = 1e-3, momentum: float = 0.9, mo
 
     model_dir = os.path.join(os.getcwd(), model_dir)
     os.makedirs(model_dir, exist_ok=True)
-    return tf.keras.estimator.model_to_estimator(keras_model=model, model_dir=model_dir)
+    return keras.estimator.model_to_estimator(keras_model=model, model_dir=model_dir)
 
 
 # noinspection PyShadowingNames
