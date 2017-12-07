@@ -18,8 +18,7 @@ DEFAULT_CONFIG_VALUES = {
     'momentum': 0.9,
     'batch_size': 32,
 }
-# Default number of classes in pre-trained models (ImageNet)
-MODEL_DEFAULT_CLASS_COUNT = 1024
+IMAGENET_WEIGHTS = 'imagenet'
 # Number of output classes
 OUTPUT_CLASS_COUNT = 2
 
@@ -92,10 +91,10 @@ def get_tfrecord_loader(file_names: List[str],
     return images, labels
 
 
-def build_model(lr: float = 1e-3, momentum: float = 0.9, model_dir: str = None) -> tf.estimator.Estimator:
+def build_model(weights: str = None, lr: float = 1e-3, momentum: float = 0.9, model_dir: str = None) -> tf.estimator.Estimator:
     # Use Keras's Inception v3 model without weights to retrain from scratch.
     # include_top = False removes the last fully connected layer.
-    base_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
+    base_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights=weights)
 
     # Replace last layer with our own.
     # GlobalAveragePooling2D converts the MxNxC tensor output into a 1xC tensor where C is the # of channels.
@@ -104,7 +103,7 @@ def build_model(lr: float = 1e-3, momentum: float = 0.9, model_dir: str = None) 
     model = tf.keras.models.Sequential()
     model.add(base_model)
     model.add(layers.GlobalAveragePooling2D())
-    model.add(layers.Dense(MODEL_DEFAULT_CLASS_COUNT, activation='relu'))
+    model.add(layers.Dense(1024, activation='relu'))
     model.add(layers.Dense(1, activation='sigmoid'))
     base_model.trainable = False
 
@@ -131,7 +130,7 @@ def train(args: argparse.Namespace) -> None:
     start_time = time.time()
     input_dir = create_tfrecords(args.data_dir)
     checkpoint1 = time.time()
-    model = build_model(args.learning_rate, args.momentum, args.output_dir)
+    model = build_model(IMAGENET_WEIGHTS, args.learning_rate, args.momentum, args.output_dir)
     checkpoint2 = time.time()
 
     train_file_names = get_tfrecord_files(input_dir, 'train')
