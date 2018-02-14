@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import glob
 import numpy as np
 import os
@@ -14,13 +15,10 @@ from preprocess import create_tfrecords
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-DEFAULT_CONFIG_VALUES = {
-    'learning_rate': 1e-3,
-    'momentum': 0.9,
-    'batch_size': 32,
-}
+CONFIG_SECTION_INPUT = 'input'
+CONFIG_SECTION_OUTPUT = 'output'
+CONFIG_SECTION_HYPERPARAMS = 'hyperparameters'
 IMAGENET_WEIGHTS = 'imagenet'
-# Number of output classes
 OUTPUT_CLASS_COUNT = 2
 
 
@@ -152,7 +150,7 @@ def train(args: argparse.Namespace) -> None:
 
     train_spec = tf.estimator.TrainSpec(lambda: get_tfrecord_loader(train_file_names,
                                                                     args.batch_size,
-                                                                    epochs=args.num_epochs),
+                                                                    epochs=args.nrof_epochs),
                                         max_steps=args.max_steps)
     eval_spec = tf.estimator.EvalSpec(lambda: get_tfrecord_loader(val_file_names,
                                                                   args.batch_size,
@@ -188,28 +186,19 @@ def train(args: argparse.Namespace) -> None:
 if __name__ == '__main__':
     """Parse command line arguments, validate them then invoke main logic"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data-dir', type=str,
-                        help='Path to extracted training data')
-    parser.add_argument('--output-dir', '-o', type=str,
-                        default='.',
-                        help='Path to save trained model. Default: current directory')
-    parser.add_argument('--learning-rate', '-lr', type=float,
-                        default=DEFAULT_CONFIG_VALUES['learning_rate'],
-                        help='Learning rate')
-    parser.add_argument('--momentum', '-m', type=float,
-                        default=DEFAULT_CONFIG_VALUES['momentum'],
-                        help='Momentum')
-    parser.add_argument('--num-epochs', '-e', type=int, default=1,
-                        help='Number of training epochs')
-    parser.add_argument('--max-steps', '-x', type=int,
-                        default=1000,
-                        help='Maximum number of training steps. Default to 1000')
-    parser.add_argument('--batch-size', '-b', type=int,
-                        default=DEFAULT_CONFIG_VALUES['batch_size'],
-                        help='Number of images to load in every batch')
-    parser.add_argument('--test', type=str,
-                        help='Test model on an image or directory of images.'
-                             'If specified, all other parameters are ignored.')
+    parser.add_argument('config', type=str, help='Path to config file')
     args = parser.parse_args()
+
+    config = configparser.ConfigParser()
+    config.read(args.config)
+
+    args.data_dir = config.get(CONFIG_SECTION_INPUT, 'data_dir')
+    args.output_dir = config.get(CONFIG_SECTION_OUTPUT, 'output_dir')
+    args.log_dir = config.get(CONFIG_SECTION_OUTPUT, 'log_dir')
+    args.learning_rate = config.getfloat(CONFIG_SECTION_HYPERPARAMS, 'learning_rate')
+    args.momentum = config.getfloat(CONFIG_SECTION_HYPERPARAMS, 'momentum')
+    args.nrof_epochs = config.getint(CONFIG_SECTION_HYPERPARAMS, 'nrof_epochs')
+    args.max_steps = config.getint(CONFIG_SECTION_HYPERPARAMS, 'max_steps')
+    args.batch_size = config.getint(CONFIG_SECTION_HYPERPARAMS, 'batch_size')
     validate_input(args)
     train(args)
