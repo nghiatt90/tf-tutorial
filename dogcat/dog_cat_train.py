@@ -4,9 +4,8 @@ import glob
 import numpy as np
 import os
 import tensorflow as tf
-from tensorflow.contrib.data import TFRecordDataset
-from tensorflow.contrib import keras
-# from tensorflow.contrib.keras.preprocess import image as kimg
+from tensorflow.python.data import TFRecordDataset
+from tensorflow import keras
 import time
 from typing import Dict, List, Tuple
 
@@ -74,8 +73,9 @@ def get_tfrecord_loader(file_names: List[str],
         :return:
         """
         features = tf.parse_single_example(proto, features=feature_map)
-        image = tf.decode_raw(features['image'], tf.float32)
+        image = tf.decode_raw(features['image'], tf.uint8)
         image = tf.reshape(image, [image_size, image_size, channels])
+        image = tf.cast(image, tf.float32)
         image = tf.subtract(image, 116.779)
         label = tf.cast(features['label'], tf.float32)
         return dict(zip(['input_1'], [image])), [label]
@@ -175,12 +175,12 @@ def train(args: argparse.Namespace) -> None:
 
     checkpoint5 = time.time()
 
-    print('Elapsed time: %.2sf' % checkpoint5 - start_time)
-    print('Create TFRecords: %.2fs' % checkpoint1 - start_time)
-    print('Build model: %.2fs' % checkpoint2 - checkpoint1)
-    print('Get file names: %.2fs' % checkpoint3 - checkpoint2)
-    print('Train and evaluate: %.2fs' % checkpoint4 - checkpoint3)
-    print('Calculate accuracy: %.2fs' % checkpoint5 - checkpoint4)
+    print('Elapsed time: %.2sf' % (checkpoint5 - start_time))
+    print('Create TFRecords: %.2fs' % (checkpoint1 - start_time))
+    print('Build model: %.2fs' % (checkpoint2 - checkpoint1))
+    print('Get file names: %.2fs' % (checkpoint3 - checkpoint2))
+    print('Train and evaluate: %.2fs' % (checkpoint4 - checkpoint3))
+    print('Calculate accuracy: %.2fs' % (checkpoint5 - checkpoint4))
 
 
 if __name__ == '__main__':
