@@ -3,13 +3,13 @@ import glob
 import os
 from typing import Dict, List, Tuple
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import tensorflow as tf
 
 from dog_cat_train import build_model
-import estimator_util as eutil
+from image_util import read_and_resize
 
 
 tf.logging.set_verbosity(tf.logging.FATAL)
@@ -44,13 +44,14 @@ def test(args: argparse.Namespace) -> None:
         image_paths.extend(glob.glob(os.path.join(args.data, '*.JPEG')))
         assert len(image_paths) > 0, '%s contains no suitable images' % args.data
 
-    images = list(map(lambda x: eutil.load_image(x), image_paths))
+    images = list(map(lambda x: read_and_resize(x), image_paths))
 
     # noinspection PyShadowingNames
     def input_fn(images: List[str]) -> Tuple[List[Dict[str, tf.Tensor]], List[tf.Tensor]]:
         features = []
         for image in images:
             image_tensor = tf.stack([image])
+            image_tensor = tf.cast(image_tensor, tf.float32)
             features.append({'input_1': image_tensor})
         return features
 
