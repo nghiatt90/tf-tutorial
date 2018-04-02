@@ -1,40 +1,43 @@
-import cv2
 import glob
 import os
 import numpy as np
 import sys
 import tensorflow as tf
-from typing import ByteString, List, Tuple
+from typing import List, Tuple
+import estimator_util as eutil
 
 
 # Ref: http://machinelearninguru.com/deep_learning/tensorflow/basics/tfrecord/tfrecord.html
 # Ref: https://github.com/kwotsin/create_tfrecords/blob/master/dataset_utils.py
 
 SHARD_COUNT = {
-    'train': 6,
-    'val': 2,
-    'test': 2
+    'train': 15,
+    'val': 5,
+    'test': 5
 }
 TFRECORD_DIR_NAME = 'tfrecords'
 
 
-def create_tfrecords(data_path: str) -> None:
+def create_tfrecords(data_path: str) -> str:
     """
     Create TensorFlow-friendly TFRecord files from raw image data.
 
     :param data_path: Path to a extracted training data
     :return: None
     """
-    if os.path.exists(os.path.join(data_path, TFRECORD_DIR_NAME)):
+    output_dir = os.path.join(data_path, TFRECORD_DIR_NAME)
+    if os.path.exists(output_dir):
         print('Found TFRecord directory. Skip converting step.')
         print('To re-run this step, delete directory %s under %s' % (TFRECORD_DIR_NAME, data_path))
-        return None
-    print('Converting raw images to TFRecords')
-    datasets = shuffle_and_divide(data_path)
-    assert len(datasets) == 3, 'Datasets must contain 3 tuples for train, validation and test sets'
-    split_names = ('train', 'val', 'test')
-    for (paths, labels), split_name in zip(datasets, split_names):
-        convert_to_tfrecords(os.path.join(data_path, TFRECORD_DIR_NAME), split_name, paths, labels)
+    else:
+        print('Converting raw images to TFRecords')
+        datasets = shuffle_and_divide(data_path)
+        assert len(datasets) == 3, 'Datasets must contain 3 tuples for train, validation and test sets'
+        split_names = ('train', 'val', 'test')
+        for (paths, labels), split_name in zip(datasets, split_names):
+            convert_to_tfrecords(output_dir, split_name, paths, labels)
+
+    return output_dir
 
 
 def shuffle_and_divide(data_path: str) -> Tuple[Tuple[List[str], List[int]],
@@ -70,37 +73,6 @@ def shuffle_and_divide(data_path: str) -> Tuple[Tuple[List[str], List[int]],
     return (train_paths, train_labels), (val_paths, val_labels), (test_paths, test_labels)
 
 
-def load_image(path: str) -> np.ndarray:
-    """
-    Read an image, resize to 224x224.
-
-    :param path: Path to image
-    :return: Image after resizing
-    """
-    image = cv2.imread(path)
-    image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB
-    image = image.astype(np.float32)
-    return image
-
-
-def _int64_feature(value: int) -> tf.train.Feature:
-    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
-
-
-def _bytes_feature(value: ByteString) -> tf.train.Feature:
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
-
-
-def _create_example_proto(path: str, label: int) -> tf.train.Example:
-    image = load_image(path)
-    features = {
-        'train/label': _int64_feature(label),
-        'train/image': _bytes_feature(tf.compat.as_bytes(image.tostring()))
-    }
-    return tf.train.Example(features=tf.train.Features(feature=features))
-
-
 def convert_to_tfrecords(output_dir: str,
                          split_name: str, paths: List[str], labels: List[int],
                          shard_count: int = None) -> None:
@@ -134,11 +106,10 @@ def convert_to_tfrecords(output_dir: str,
             start_idx = shard_id * images_per_shard
             end_idx = min(start_idx + images_per_shard, total)
             for i in range(start_idx, end_idx):
-                sys.stdout.write('\r>> Converting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
+                sys.stdout.write('\rConverting image %d/%d shard %d' % (i + 1, total, shard_id + 1))
                 sys.stdout.flush()
-
-            example_proto = _create_example_proto(paths[i], labels[i])
-            writer.write(example_proto.SerializeToString())
+                example_proto = eutil.create_example_proto(paths[i], labels[i])
+                writer.write(example_proto.SerializeToString())
 
         sys.stdout.write('\n')
         sys.stdout.flush()
